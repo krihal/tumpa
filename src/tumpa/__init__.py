@@ -1,73 +1,46 @@
+import datetime
 import io
 import os
 import sys
 import time
-import datetime
-from PySide2 import QtWidgets
-from PySide2.QtCore import QObject, Signal, QSize, Qt, QThread
-from PySide2 import QtGui
 
 import johnnycanencrypt as jce
 import johnnycanencrypt.johnnycanencrypt as rjce
+<<<<<<< HEAD:src/tumpa/__init__.py
 from tumpa.resources import load_icon, load_css
 from tumpa.configuration import get_keystore_directory
 
 css = load_css("mainwindow.css")
+=======
+from PySide2 import QtGui, QtWidgets
+from PySide2.QtCore import QObject, QSize, Qt, QThread, Signal
+
+import tumpasrc.key_widgets.utils as key_utils
+from tumpasrc.commons import MessageDialogs, PasswordEdit, css
+from tumpasrc.configuration import get_keystore_directory
+from tumpasrc.key_widgets.display import KeyWidgetList
+from tumpasrc.key_widgets.forms import NewKeyFormWidget
+from tumpasrc.resources import load_css, load_icon
+from tumpasrc.smartcard_widgets.forms import (SmartCardConfirmationDialog,
+                                              SmartCardTextFormWidget,
+                                              SmartPinFormWidget)
+from tumpasrc.threads import HardwareThread
+>>>>>>> 9c4a15f (Refactor UI structure):tumpasrc/__init__.py
 
 
-class HardwareThread(QThread):
-    signal = Signal((bool,))
-
-    def __init__(self, nextsteps_slot):
-        QThread.__init__(self)
-        self.flag = True
-        self.signal.connect(nextsteps_slot)
-
-    def run(self):
-        while self.flag:
-            time.sleep(1)
-            result = rjce.is_smartcard_connected()
-            self.signal.emit(result)
-
-
-class PasswordEdit(QtWidgets.QLineEdit):
-    """
-    A LineEdit with icons to show/hide password entries
-    """
-
-    CSS = """QLineEdit {
-        border-radius: 10px;
-        height: 30px;
-        margin: 0px 0px 0px 0px;
-    }
-    """
-
-    def __init__(self):
-        super().__init__()
-
-        # Set styles
-        self.setStyleSheet(self.CSS)
-
-        self.visibleIcon = load_icon("eye_visible.svg")
-        self.hiddenIcon = load_icon("eye_hidden.svg")
-
-        self.setEchoMode(QtWidgets.QLineEdit.Password)
-        self.togglepasswordAction = self.addAction(
-            self.visibleIcon, QtWidgets.QLineEdit.TrailingPosition
+class KeyViewWidget(QtWidgets.QWidget):
+    def __init__(self, ks, parent=None):
+        super(KeyViewWidget, self).__init__(parent)
+        keyring_instruction_label = QtWidgets.QLabel(
+            "Single click on a key to enable writing to smart card. "
+            + "Double click on a key to export the public key."
         )
-        self.togglepasswordAction.triggered.connect(self.on_toggle_password_Action)
-        self.password_shown = False
+        keyring_instruction_label.setObjectName("keyring_instruction")
 
-    def on_toggle_password_Action(self):
-        if not self.password_shown:
-            self.setEchoMode(QtWidgets.QLineEdit.Normal)
-            self.password_shown = True
-            self.togglepasswordAction.setIcon(self.hiddenIcon)
-        else:
-            self.setEchoMode(QtWidgets.QLineEdit.Password)
-            self.password_shown = False
-            self.togglepasswordAction.setIcon(self.visibleIcon)
+        # List of keys shown
+        self.widget = KeyWidgetList(ks)
 
+<<<<<<< HEAD:src/tumpa/__init__.py
 
 class MessageDialogs:
     """
@@ -524,86 +497,55 @@ class KeyWidget(QtWidgets.QWidget):
         uid_widget.setLayout(uid_vboxlayout)
 
         # UID and date layout
+=======
+        # Buttons
+        self.generateButton = QtWidgets.QPushButton(text="Generate new key")
+        self.generateButton.clicked.connect(self.parent().show_generate_dialog)
+        self.uploadButton = QtWidgets.QPushButton(text="Upload to SmartCard")
+        self.uploadButton.clicked.connect(self.parent().upload_to_smartcard)
+        self.uploadButton.setEnabled(False)
+>>>>>>> 9c4a15f (Refactor UI structure):tumpasrc/__init__.py
         hlayout = QtWidgets.QHBoxLayout()
-        hlayout.addWidget(uid_widget)
-        hlayout.addWidget(date_label)
-        hlayout.setAlignment(Qt.AlignTop)
-        hlayout.setContentsMargins(11, 0, 11, 11)
-        group_widget = QtWidgets.QWidget()
-        group_widget.setLayout(hlayout)
+        hlayout.addWidget(self.generateButton)
+        hlayout.addWidget(self.uploadButton)
+        wd = QtWidgets.QWidget()
+        wd.setLayout(hlayout)
 
-        fp_group_layout = QtWidgets.QVBoxLayout()
-        fp_group_layout.addWidget(self.keyfingerprint)
-        fp_group_layout.addWidget(group_widget)
-
-        self.setLayout(fp_group_layout)
-        self.setToolTip("Double click to export public key")
-        self.setObjectName("keywidget")
-
-    def mouseDoubleClickEvent(self, event):
-        if self.export_public_key(self, self.fingerprint, self.key.get_pub_key()):
-            self.success_dialog = MessageDialogs.success_dialog(
-                "Exported public key successfully!"
-            )
-            self.success_dialog.show()
-
-    @classmethod
-    def export_public_key(cls, widget, fingerprint, public_key):
-        select_path = QtWidgets.QFileDialog.getExistingDirectory(
-            widget,
-            "Select directory to save public key",
-            ".",
-            QtWidgets.QFileDialog.ShowDirsOnly,
-        )
-        if select_path:
-            filepassphrase = f"{fingerprint}.pub"
-            filepath = os.path.join(select_path, filepassphrase)
-            with open(filepath, "w") as fobj:
-                fobj.write(public_key)
-            return True
-        return False
+        vboxlayout = QtWidgets.QVBoxLayout()
+        vboxlayout.addWidget(keyring_instruction_label)
+        vboxlayout.addWidget(self.widget)
+        vboxlayout.addWidget(wd)
+        self.setLayout(vboxlayout)
 
 
-class KeyWidgetList(QtWidgets.QListWidget):
-    def __init__(self, ks):
-        super(KeyWidgetList, self).__init__()
-        self.setObjectName("KeyWidgetList")
-        self.ks = ks
+class SmartCardViewWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super(SmartCardViewWidget, self).__init__(parent)
+        self.main_area = QtWidgets.QLabel("This is where smart card stuff go.")
 
-        # Set layout.
-        # self.layout = QtWidgets.QVBoxLayout(self)
-        # self.setLayout(self.layout)
-        self.updateList()
-        self.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
-        self.setMinimumHeight(400)
-        self.currentItemChanged.connect(self.on_item_changed)
+        # Left Navbar
+        self.editNameButton = QtWidgets.QPushButton(text="Edit Name")
+        self.editNameButton.clicked.connect(self.parent().show_set_name)
+        self.editPublicUrlButton = QtWidgets.QPushButton(text="Edit Public URL")
+        self.editPublicUrlButton.clicked.connect(self.parent().show_set_public_url)
+        self.editUserPinButton = QtWidgets.QPushButton(text="Edit User Pin")
+        self.editUserPinButton.clicked.connect(self.parent().show_change_user_pin)
+        self.editAdminPinButton = QtWidgets.QPushButton(text="Edit Admin Pin")
+        self.editAdminPinButton.clicked.connect(self.parent().show_change_admin_pin)
+        vnavlayout = QtWidgets.QVBoxLayout()
+        vnavlayout.addWidget(self.editNameButton)
+        vnavlayout.addWidget(self.editPublicUrlButton)
+        vnavlayout.addWidget(self.editUserPinButton)
+        vnavlayout.addWidget(self.editAdminPinButton)
+        navbarWidget = QtWidgets.QWidget()
+        navbarWidget.setLayout(vnavlayout)
+        navbarWidget.setObjectName("sidenavbar")
+        navbarWidget.setMaximumWidth(180)
 
-    def updateList(self):
-        try:
-            keys = self.ks.get_all_keys()
-            keys.sort(key=lambda x: x.creationtime, reverse=True)
-            for key in keys:
-                kw = KeyWidget(key)
-                item = QtWidgets.QListWidgetItem()
-                item.setSizeHint(kw.sizeHint())
-                self.addItem(item)
-                self.setItemWidget(item, kw)
-            if len(keys) > 0:
-                # Select the top most row
-                self.setCurrentRow(0)
-        except Exception as e:
-            print(e)
-
-    def on_item_changed(self):
-        print(self.selectedItems())
-
-    def addnewKey(self, key):
-        kw = KeyWidget(key)
-        item = QtWidgets.QListWidgetItem()
-        item.setSizeHint(kw.sizeHint())
-        self.insertItem(0, item)
-        self.setItemWidget(item, kw)
-        self.setCurrentRow(0)
+        self.hlayout = QtWidgets.QHBoxLayout()
+        self.hlayout.addWidget(navbarWidget)
+        self.hlayout.addWidget(self.main_area)
+        self.setLayout(self.hlayout)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -615,8 +557,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setMaximumWidth(600)
         self.setMaximumHeight(575)
         self.ks = jce.KeyStore(get_keystore_directory())
-        self.vboxlayout_for_keys = QtWidgets.QVBoxLayout()
-        self.widget = KeyWidgetList(self.ks)
         self.current_fingerprint = ""
         self.cardcheck_thread = HardwareThread(self.enable_upload)
 
@@ -632,9 +572,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # smartcard menu
         changepinAction = QtWidgets.QAction("Change user &pin", self)
-        changepinAction.triggered.connect(self.show_change_user_pin_dialog)
+        changepinAction.triggered.connect(self.show_change_user_pin)
         changeadminpinAction = QtWidgets.QAction("Change &admin pin", self)
-        changeadminpinAction.triggered.connect(self.show_change_admin_pin_dialog)
+        changeadminpinAction.triggered.connect(self.show_change_admin_pin)
         changenameAction = QtWidgets.QAction("Set cardholder &name", self)
         changenameAction.triggered.connect(self.show_set_name)
         changeurlAction = QtWidgets.QAction("Set public key &URL", self)
@@ -648,34 +588,13 @@ class MainWindow(QtWidgets.QMainWindow):
         smartcardmenu.addAction(changeurlAction)
         smartcardmenu.addAction(resetYubiKeylAction)
 
-        self.cwidget = QtWidgets.QWidget()
-        self.generateButton = QtWidgets.QPushButton(text="Generate new key")
-        self.generateButton.clicked.connect(self.show_generate_dialog)
-        self.uploadButton = QtWidgets.QPushButton(text="Upload to SmartCard")
-        self.uploadButton.clicked.connect(self.upload_to_smartcard)
-        self.uploadButton.setEnabled(False)
         # self.widget.itemSelectionChanged.connect(self.enable_upload)
-
-        hlayout = QtWidgets.QHBoxLayout()
-        hlayout.addWidget(self.generateButton)
-        hlayout.addWidget(self.uploadButton)
-        wd = QtWidgets.QWidget()
-        wd.setLayout(hlayout)
-
-        keyring_label = QtWidgets.QLabel("Available keys")
-        keyring_label.setObjectName("keyring_label")
-        keyring_instruction_label = QtWidgets.QLabel(
-            "Single click on a key to enable writing to smart card. "
-            + "Double click on a key to export the public key."
-        )
-        keyring_instruction_label.setObjectName("keyring_instruction")
-        vboxlayout = QtWidgets.QVBoxLayout()
-        vboxlayout.addWidget(keyring_label)
-        vboxlayout.addWidget(keyring_instruction_label)
-        vboxlayout.addWidget(self.widget)
-        vboxlayout.addWidget(wd)
-        self.cwidget.setLayout(vboxlayout)
-        self.setCentralWidget(self.cwidget)
+        self.tabs = QtWidgets.QTabWidget()
+        self.keyWidget = KeyViewWidget(self.ks, self)
+        self.tabs.addTab(self.keyWidget, "Available Keys")
+        self.smartCardWidget = SmartCardViewWidget(self)
+        self.tabs.addTab(self.smartCardWidget, "Smart Card Settings")
+        self.setCentralWidget(self.tabs)
         self.setStyleSheet(css)
         self.cardcheck_thread.start()
 
@@ -707,53 +626,64 @@ class MainWindow(QtWidgets.QMainWindow):
         "Slot to enable the upload to smartcard button"
         # If no item is selected on the ListWidget, then
         # no need to update the uploadButton status.
-        if not self.widget.selectedItems():
+        try:
+            if not self.keyWidget.widget.selectedItems():
+                return
+        except RuntimeError:
             return
-        self.uploadButton.setEnabled(value)
+        self.keyWidget.uploadButton.setEnabled(value)
 
-    def show_change_user_pin_dialog(self):
-        "This slot shows the input dialog to change user pin"
+    def show_change_user_pin(self):
+        "This slot shows the input widget to change user pin"
         self.cardcheck_thread.flag = False
-        self.smalldialog = SmartPinDialog(
+        self.tabs.setCurrentIndex(1)
+        self.smartCardWidget.hlayout.removeWidget(self.smartCardWidget.main_area)
+        self.smartCardWidget.main_area.deleteLater()
+        self.smartCardWidget.main_area = SmartPinFormWidget(
             self.change_pin_on_card_slot,
             "Change user pin",
             "New User pin",
-            enable_window=self.enable_mainwindow,
         )
-        self.smalldialog.show()
+        self.smartCardWidget.hlayout.addWidget(self.smartCardWidget.main_area)
 
     def show_set_public_url(self):
-        "This slot shows the input dialog to set public url"
+        "This slot shows the input widget to set public url"
         self.cardcheck_thread.flag = False
-        self.smalldialog = SmartCardTextDialog(
+        self.tabs.setCurrentIndex(1)
+        self.smartCardWidget.hlayout.removeWidget(self.smartCardWidget.main_area)
+        self.smartCardWidget.main_area.deleteLater()
+        self.smartCardWidget.main_area = SmartCardTextFormWidget(
             self.set_url_on_card_slot,
             "Add public URL",
             "Public URL",
-            enable_window=self.enable_mainwindow,
         )
-        self.smalldialog.show()
+        self.smartCardWidget.hlayout.addWidget(self.smartCardWidget.main_area)
 
     def show_set_name(self):
-        "This slot shows the input dialog to set name"
+        "This slot shows the input widget to set name"
         self.cardcheck_thread.flag = False
-        self.smalldialog = SmartCardTextDialog(
+        self.tabs.setCurrentIndex(1)
+        self.smartCardWidget.hlayout.removeWidget(self.smartCardWidget.main_area)
+        self.smartCardWidget.main_area.deleteLater()
+        self.smartCardWidget.main_area = SmartCardTextFormWidget(
             self.set_name_on_card_slot,
             "Add Name",
             "Name",
-            enable_window=self.enable_mainwindow,
         )
-        self.smalldialog.show()
+        self.smartCardWidget.hlayout.addWidget(self.smartCardWidget.main_area)
 
-    def show_change_admin_pin_dialog(self):
-        "This slot shows the input dialog to change admin pin"
+    def show_change_admin_pin(self):
+        "This slot shows the input widget to change admin pin"
         self.cardcheck_thread.flag = False
-        self.smalldialog = SmartPinDialog(
+        self.tabs.setCurrentIndex(1)
+        self.smartCardWidget.hlayout.removeWidget(self.smartCardWidget.main_area)
+        self.smartCardWidget.main_area.deleteLater()
+        self.smartCardWidget.main_area = SmartPinFormWidget(
             self.change_admin_pin_on_card_slot,
             "Change admin pin",
             "New Admin pin",
-            enable_window=self.enable_mainwindow,
         )
-        self.smalldialog.show()
+        self.smartCardWidget.hlayout.addWidget(self.smartCardWidget.main_area)
 
     def change_pin_on_card_slot(self, userpin, adminpin):
         "Final slot which will try to change the userpin"
@@ -818,19 +748,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.success_dialog.show()
         self.enable_cardcheck_thread_slot()
 
-    def show_generate_dialog(self):
-        "Shows the dialog to generate new key"
-        self.disable_cardcheck_thread_slot()
-        self.newd = NewKeyDialog(
-            self.ks,
-            self.widget.addnewKey,
-            self.disable_generate_button,
-            self.enable_generate_button,
-            enable_window=self.enable_mainwindow,
-        )
-        self.newd.show()
-        self.setEnabled(False)
-
     def disable_generate_button(self):
         self.cardcheck_thread.flag = False
         self.generateButton.setEnabled(False)
@@ -844,12 +761,28 @@ class MainWindow(QtWidgets.QMainWindow):
         self.update()
         self.repaint()
 
+    def show_generate_dialog(self):
+        "Shows the form to generate new key"
+        self.disable_cardcheck_thread_slot()
+        new_key_form = NewKeyFormWidget(self.ks, self.restore_list_view)
+        self.setCentralWidget(new_key_form)
+
+    def restore_list_view(self):
+        self.enable_cardcheck_thread_slot()
+        self.tabs = QtWidgets.QTabWidget()
+        self.keyWidget = KeyViewWidget(self.ks, self)
+        self.tabs.addTab(self.keyWidget, "Available Keys")
+        self.smartCardWidget = SmartCardViewWidget(self)
+        self.tabs.addTab(self.smartCardWidget, "Smart Card Settings")
+        self.setCentralWidget(self.tabs)
+
     def enable_mainwindow(self):
         self.enable_cardcheck_thread_slot()
         self.setEnabled(True)
 
     def disable_cardcheck_thread_slot(self):
         self.cardcheck_thread.flag = False
+        self.cardcheck_thread.quit()
 
     def enable_cardcheck_thread_slot(self):
         self.cardcheck_thread.flag = True
@@ -858,7 +791,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def upload_to_smartcard(self):
         "Shows the userinput dialog to upload the selected key to the smartcard"
         # This means no key is selected on the list
-        if not self.widget.selectedItems():
+        if not self.keyWidget.widget.selectedItems():
             self.error_dialog = MessageDialogs.error_dialog(
                 "upload to smart card", "Please select a key from the list."
             )
@@ -867,8 +800,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.disable_cardcheck_thread_slot()
         self.setEnabled(False)
-        item = self.widget.selectedItems()[0]
-        kw = self.widget.itemWidget(item)
+        item = self.keyWidget.widget.selectedItems()[0]
+        kw = self.keyWidget.widget.itemWidget(item)
         self.current_key = kw.key
         self.sccd = SmartCardConfirmationDialog(
             self.get_pins_and_passphrase_and_write,
@@ -901,16 +834,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def export_public_key(self):
         # This means no key is selected on the list
-        if not self.widget.selectedItems():
+        if not self.keyWidget.widget.selectedItems():
             self.error_dialog = MessageDialogs.error_dialog(
                 "exporting public key", "Please select a key from the list."
             )
             self.error_dialog.show()
             return
 
-        item = self.widget.selectedItems()[0]
-        kw = self.widget.itemWidget(item)
-        if KeyWidget.export_public_key(self, kw.key.fingerprint, kw.key.get_pub_key()):
+        item = self.keyWidget.widget.selectedItems()[0]
+        kw = self.keyWidget.widget.itemWidget(item)
+        if key_utils.export_public_key(self, kw.key.fingerprint, kw.key.get_pub_key()):
             self.success_dialog = MessageDialogs.success_dialog(
                 "Exported public key successfully!"
             )
